@@ -1,0 +1,1 @@
+Generate a 16 bit floating point multiplier. Maximize throughput even if results have a latency of more than 1 cycle. Take 2 inputs and a enable bit, and then output the result and a valid bit. 

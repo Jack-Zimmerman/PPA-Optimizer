@@ -200,6 +200,7 @@ function drawChart(run, spec) {
   const W = 560, H = 250, L = 58, R = W - 16, T = 14, B = H - 34;
   const maxR = Math.max(...run.rounds.map(r => r.round), 0);
   const sw = (R - L) / (maxR + 1);
+  const cx = r => L + sw * (r + 0.5);     // one column per round: every dot of a round shares this x
   const cands = run.rows.filter(r => r.measured && r.round > 0 && r[spec.key] != null);
   const incs = run.incumbents.filter(i => i[spec.key] != null);
   const vals = cands.map(r => r[spec.key]).concat(incs.map(i => i[spec.key]));
@@ -219,7 +220,7 @@ function drawChart(run, spec) {
   });
   svg.appendChild(el("line", {class: "axis-line", x1: L, x2: R, y1: B, y2: B}));
   for (let r = 0; r <= maxR; r++) {
-    svg.appendChild(el("text", {x: L + sw * r + sw * 0.28, y: B + 18, "text-anchor": "middle"}, r === 0 ? "start" : "round " + r));
+    svg.appendChild(el("text", {x: cx(r), y: B + 18, "text-anchor": "middle"}, r === 0 ? "start" : "round " + r));
   }
   if (spec.target && run.target_ns != null) {
     svg.appendChild(el("line", {class: "target", x1: L, x2: R, y1: sy(run.target_ns), y2: sy(run.target_ns)}));
@@ -230,14 +231,13 @@ function drawChart(run, spec) {
   const byRound = {};
   cands.forEach(c => (byRound[c.round] = byRound[c.round] || []).push(c));
   Object.keys(byRound).forEach(r => {
-    const list = byRound[r], step = Math.min(11, sw * 0.46 / Math.max(1, list.length - 1));
-    list.forEach((c, i) => {
-      const x = L + sw * r + sw * 0.5 + i * step, y = sy(c[spec.key]);
+    byRound[r].forEach(c => {
+      const x = cx(+r), y = sy(c[spec.key]);
       svg.appendChild(mark(c.source, x, y, "cand"));
       marks.push({x, y, row: c});
     });
   });
-  const pts = incs.map(i => [L + sw * i.round + sw * 0.28, sy(i[spec.key]), i]);
+  const pts = incs.map(i => [cx(i.round), sy(i[spec.key]), i]);
   if (pts.length > 1) svg.appendChild(el("polyline", {class: "path", points: pts.map(p => p[0] + "," + p[1]).join(" ")}));
   pts.forEach(([x, y, i]) => { svg.appendChild(mark(i.source === "knob" ? "knob" : "rewrite", x, y, "inc")); marks.push({x, y, row: i}); });
   if (pts.length) {   // label only the first and last values

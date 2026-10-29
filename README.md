@@ -2,16 +2,39 @@
 
 An AI-assisted RTL exploration tool. An LLM proposes SystemVerilog, a verification gate checks it against tests built from the spec, and deterministic EDA tools (Yosys + OpenROAD, sky130hd) measure power, performance and area. Every metric comes from a tool report; the LLM never supplies a number.
 
-```
-spec.md --> test-author agent --> suites/<name>/        (reference model + SVA + cover points)
-        \-> rtl-author agent  --> RTL
-                                   |
-              make qualify  (is the suite trustworthy?)
-                                   |
-        candidates --> lint --> port check --> suite (cocotb + Verilator) --> OpenROAD flow --> metrics
+```mermaid
+flowchart TD
+    spec["spec.md<br/>(loose or with port table)"] -->|"loose spec only"| res["spec-resolver agent<br/>writes name.resolved.md"]
+    res --> spec2["resolved spec"]
+    spec -->|"has port table"| spec2
+
+    spec2 --> ta["test-author agent<br/>(spec only, never sees RTL)"]
+    spec2 --> ra["rtl-author agent<br/>(spec only, never sees tests)"]
+    ta --> suite[("suites/name/<br/>Python model + SVA + cover points")]
+    ra --> rtl0["first RTL"]
+
+    suite --> q{"make qualify<br/>passes RTL, cover points hit,<br/>coverage, mutants killed?"}
+    rtl0 --> q
+    q -->|"suite_weak"| ta
+    q -->|"qualified"| loop
+
+    subgraph loop ["make iterate: one round"]
+        direction TB
+        best["current best RTL<br/>+ critical path from report"] --> rw["rtl-author: N rewrites<br/>+ flow-knob variants"]
+        rw --> lint["lint (slang, ~1 s)"]
+        lint --> gate["verification gate<br/>cocotb + Verilator vs model, SVA"]
+        gate -->|"fail: not measured"| drop["rejected, class recorded"]
+        gate -->|"pass"| flow["OpenROAD flow, parallel<br/>Yosys, place, CTS, route"]
+        flow --> met["metrics from 6_report.json<br/>area, slack, power, with provenance"]
+        met --> pick{"select best<br/>timing met, then latency, then area"}
+        pick -->|"not converged"| best
+    end
+
+    pick -->|"converged"| out["best.sv + history.json"]
+    out --> viz["make viz<br/>work/report.html"]
 ```
 
-Status: the flow, parallel runner and verification gate are built. The LLM loop, CLI and report are not (see [CLAUDE.md](CLAUDE.md)). Agents are used by hand for now.
+Status: the flow, parallel runner, verification gate, iteration loop (`make iterate`) and HTML report (`make viz`) are built. The loop and the RTL/suite authoring run on Claude Code dev agents (headless `claude` CLI), not yet the Anthropic API. Not built: API-based proposers, a sandboxed verifier, formal checks, fast screening mode (see [CLAUDE.md](CLAUDE.md)).
 
 ## 1. Setup (macOS arm64)
 
